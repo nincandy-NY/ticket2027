@@ -27,21 +27,49 @@ slipUpload.addEventListener('change', function() {
 });
 
 // ฟังก์ชันบันทึกภาพบัตร
-downloadBtn.addEventListener('click', () => {
-    if(nameInput.value === "" || slipUpload.files.length === 0) {
-        alert("กรุณาใส่ชื่อและอัปโหลดสลิปก่อนบันทึกครับ");
+downloadBtn.addEventListener('click', async () => {
+    const name = nameInput.value;
+    const file = slipUpload.files[0];
+
+    if(name === "" || !file) {
+        alert("กรุณาใส่ชื่อและอัปโหลดสลิปก่อนครับ");
         return;
     }
 
-    // ใช้ scale: 2 เพื่อให้ภาพที่เซฟออกมาคมชัด (High Resolution)
-    html2canvas(ticket, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: null
-    }).then(canvas => {
-        const link = document.createElement('a');
-        link.download = `Ticket-NY2027-${nameInput.value}.png`;
-        link.href = canvas.toDataURL("image/png");
-        link.click();
-    });
+    // แสดง Loading หรือปิดปุ่มเพื่อกันกดซ้ำ
+    downloadBtn.innerText = "กำลังบันทึกข้อมูล...";
+    downloadBtn.disabled = true;
+
+    try {
+        const { addDoc, collection, ref, uploadBytes, getDownloadURL } = window.fbUpload;
+        
+        // 1. อัปโหลดรูปลง Storage
+        const storageRef = ref(window.firebaseStorage, `slips/${Date.now()}_${name}`);
+        const snapshot = await uploadBytes(storageRef, file);
+        const downloadURL = await getDownloadURL(snapshot.ref);
+
+        // 2. บันทึกลง Firestore
+        await addDoc(collection(window.firebaseDB, "registrations"), {
+            guestName: name,
+            slipUrl: downloadURL,
+            timestamp: new Date()
+        });
+
+        alert("บันทึกข้อมูลเรียบร้อยแล้ว! เจอกันวันงานครับ");
+        
+        // ส่วนเดิมของคุณ: html2canvas
+        html2canvas(ticket, { scale: 2 }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = `HPNY2027_${name}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+
+    } catch (e) {
+        console.error(e);
+        alert("เกิดข้อผิดพลาดในการส่งข้อมูล");
+    } finally {
+        downloadBtn.innerText = "SAVE TICKET (PNG)";
+        downloadBtn.disabled = false;
+    }
 });
