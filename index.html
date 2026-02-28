@@ -63,6 +63,30 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="script.js"></script>
+    <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+  // ใช้ Config เดียวกับใน App Expo ของคุณ
+  const firebaseConfig = {
+    apiKey: "AIzaSyDz...", 
+    projectId: "dashbord-cc606",
+    storageBucket: "dashbord-cc606.firebasestorage.app",
+    // ... คัดลอกมาจาก firebaseConfig.js ให้ครบ
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
+
+  // ส่งตัวแปรไปให้ script2.js ใช้งาน
+  window.firebaseDB = db;
+  window.firebaseStorage = storage;
+  window.fbUpload = { addDoc, collection, ref, uploadBytes, getDownloadURL };
+</script>
+<script src="script2.js"></script>
 </body>
 
 </html>
+
