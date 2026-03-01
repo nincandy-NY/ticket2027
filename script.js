@@ -5,83 +5,77 @@ const slipPreview = document.getElementById('slip-preview');
 const downloadBtn = document.getElementById('download-btn');
 const ticket = document.getElementById('ticket');
 
+// 1. อัปเดตชื่อบนบัตรแบบ Real-time
 nameInput.addEventListener('input', (e) => {
     displayName.innerText = e.target.value.toUpperCase() || "YOUR NAME";
 });
 
-// ฟังก์ชันบีบอัดรูปภาพก่อนอัปโหลด เพื่อแก้ปัญหาอัปโหลดช้า
-async function compressImage(file) {
-    return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target.result;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 800; // ปรับความกว้างเหลือ 800px
-                const scaleSize = MAX_WIDTH / img.width;
-                canvas.width = MAX_WIDTH;
-                canvas.height = img.height * scaleSize;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.7); // บีบอัดคุณภาพ 70%
-            };
-        };
-    });
-}
-
+// 2. แสดงตัวอย่างสลิป
 slipUpload.addEventListener('change', function() {
     const file = this.files[0];
     if (file) {
         const reader = new FileReader();
         reader.onload = (e) => {
             slipPreview.innerHTML = `<img src="${e.target.result}" style="width:100%; height:100%; object-fit:contain;">`;
-        }
+        };
         reader.readAsDataURL(file);
     }
 });
 
-downloadBtn.addEventListener('click', async () => {
-    const name = nameInput.value;
-    const file = slipUpload.files[0];
+// 3. ฟังก์ชันแปลงไฟล์เป็น Base64
+async function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = error => reject(error);
+    });
+}
 
-    if(!name || !file) {
-        alert("กรุณากรอกชื่อและแนบสลิปด้วยครับ");
+// 4. ฟังก์ชันหลัก: ส่งไป Drive และโหลดบัตร
+downloadBtn.addEventListener('click', async () => {
+    const name = nameInput.value.trim();
+    const file = slipUpload.files[0];
+    
+    // *** วาง URL เว็บแอป (GAS) ของคุณที่นี่ ***
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwqMJOV4kmpYVYsbGukMBADDKVSD8p2qz_p86wgwE3iAaLH84dkOBaPiTm6SRBjV-E8/exec";
+
+    if (!name || !file) {
+        alert("กรุณากรอกชื่อและอัปโหลดสลิปด้วยครับ");
         return;
     }
 
-    downloadBtn.innerText = "กำลังอัปโหลด (บีบอัดรูปภาพ)...";
+    downloadBtn.innerText = "กำลังอัปโหลดข้อมูล...";
     downloadBtn.disabled = true;
 
     try {
-        const { db, storage, tools } = window.fbUpload;
-        
-        // บีบอัดไฟล์ก่อนส่ง
-        const compressedFile = await compressImage(file);
-        
-        // 1. Upload ไปยัง Firebase Storage
-        const storageRef = tools.ref(storage, `slips/${Date.now()}_${name}.jpg`);
-        const snapshot = await tools.uploadBytes(storageRef, compressedFile);
-        const url = await tools.getDownloadURL(snapshot.ref);
+        const base64Data = await fileToBase64(file);
 
-        // 2. บันทึกข้อมูลลง Firestore
-        await tools.addDoc(tools.collection(db, "registrations"), {
-            guestName: name,
-            slipUrl: url,
-            timestamp: new Date()
+        // ส่งข้อมูลไป Google Drive อย่างเดียว
+        await fetch(GAS_URL, {
+            method: "POST",
+            mode: "no-cors", 
+            headers: { "Content-Type": "text/plain" },
+            body: JSON.stringify({
+                fileName: `HPNY2027_${name}_${Date.now()}.jpg`,
+                base64Image: base64Data,
+                contentType: file.type,
+                guestName: name // ส่งชื่อไปด้วยเพื่อให้ Script จัดการต่อได้
+            })
         });
 
-        // 3. บันทึกภาพบัตรลงเครื่อง
-        html2canvas(ticket, { scale: 2 }).then(canvas => {
-            const link = document.createElement('a');
-            link.download = `Ticket_${name}.png`;
-            link.href = canvas.toDataURL();
-            link.click();
-            alert("สำเร็จ! ข้อมูลถูกส่งไปที่หลังบ้านแล้ว");
-        });
+        // สร้างภาพบัตรและดาวน์โหลดลงเครื่องทันที (ไม่ต้องรอผลตอบกลับจาก Drive เพราะใช้ no-cors)
+        const canvas = await html2canvas(ticket, { scale: 2, useCORS: true });
+        const link = document.createElement('a');
+        link.download = `Ticket_${name}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+
+        alert("สำเร็จ! ส่งข้อมูลเรียบร้อยและบันทึกบัตรเชิญแล้ว");
+        location.reload();
 
     } catch (err) {
+        console.error(err);
         alert("เกิดข้อผิดพลาด: " + err.message);
     } finally {
         downloadBtn.innerText = "SAVE TICKET & SEND INFO";
